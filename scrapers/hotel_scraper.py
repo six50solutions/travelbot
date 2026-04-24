@@ -71,25 +71,24 @@ def expand_date_combos(check_in_start: date, check_in_end: date,
 
 def build_google_hotels_url(search_query: str, check_in: date,
                              check_out: date, adults: int = 2) -> str:
-    """
-    Builds a Google Hotels search URL.
-    e.g. https://www.google.com/travel/hotels/s/The%20Langham%20Chicago?checkin=2026-08-01&checkout=2026-08-04&adults=2
-    """
     from urllib.parse import quote_plus
     q = quote_plus(search_query)
     ci = check_in.strftime("%Y-%m-%d")
     co = check_out.strftime("%Y-%m-%d")
+    # Use the /search endpoint which is more stable
     return (
-        f"https://www.google.com/travel/hotels/s/{q}"
+        f"https://www.google.com/travel/hotels/search"
         f"?q={q}&checkin={ci}&checkout={co}&adults={adults}&hl=en&gl=us&curr=USD"
     )
+
+
+DEBUG_SCREENSHOTS = os.environ.get("DEBUG_SCREENSHOTS", "0") == "1"
 
 
 async def scrape_google_hotels(page, hotel: dict, check_in: date,
                                 check_out: date, adults: int = 2) -> list[dict]:
     """
-    Navigate to Google Hotels for a specific hotel + dates,
-    extract prices per provider from the hotel detail page.
+    Navigate to Google Hotels for a specific hotel + dates.
     Returns list of {provider, price, room_type, cancellable}
     """
     url = build_google_hotels_url(hotel["search_query"], check_in, check_out, adults)
@@ -97,115 +96,159 @@ async def scrape_google_hotels(page, hotel: dict, check_in: date,
 
     for attempt in range(MAX_RETRIES + 1):
         try:
-            await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
-            await page.wait_for_timeout(random.randint(2000, 4000))
+            await page.goto(url, wait_until="networkidle", timeout=45_000)
+            await page.wait_for_timeout(random.randint(2500, 4500))
 
-            # ── Dismiss consent / cookie dialog if present ──────────────────
-            try:
-                consent = page.locator('button:has-text("Accept all"), button:has-text("I agree")')
-                if await consent.count() > 0:
-                    await consent.first.click()
-                    await page.wait_for_timeout(1000)
-            except Exception:
-                pass
-
-            # ── Try to click into the specific hotel listing ────────────────
-            # Google Hotels shows a list; click the first result matching our hotel
-            hotel_card = page.locator('[data-hveid]').first
-            if await hotel_card.count() > 0:
+            # ── Dismiss consent / cookie banner ─────────────────────────────
+            for consent_text in ["Accept all", "I agree", "Agree", "Accept"]:
                 try:
-                    await hotel_card.click()
-                    await page.wait_for_timeout(2000)
+                    btn = page.locator(f'button:has-text("{consent_text}")')
+                    if await btn.count() > 0:
+                        await btn.first.click()
+                        await page.wait_for_timeout(1500)
+                        break
                 except Exception:
                     pass
 
-            # ── Extract prices from the "Prices" / "All options" panel ──────
-            # Selector targets the price rows in the booking options panel
-            price_rows = page.locator('[data-price], [jsname="priceRow"], .kCsRcb, [data-provider-name]')
-            count = await price_rows.count()
+            # ── Debug: save screenshot to see what we're working with ───────
+            if DEBUG_SCREENSHOTS:
+                safe_name = hotel["name"].replace(" ", "_")[:30]
+                await page.screenshot(
+                    path=f"debug_{safe_name}_{check_in}.png",
+                    full_page=False
+                )
+                logger.info(f"  📸 Screenshot saved: debug_{safe_name}_{check_in}.png")
 
-            if count == 0:
-                # Fallback: try featured price at top of page
-                featured = page.locator('[data-hveid] [aria-label*="$"], [data-hveid] [data-price]').first
-                if await featured.count() > 0:
-                    price_text = await featured.inner_text()
-                    price = _parse_price(price_text)
-                    if price:
-                        results.append({
-                            "provider": "Google Hotels",
-                            "price": price,
-                            "room_type": None,
-                            "cancellable": None,
-                        })
+            # ── Strategy 1: look for hotel card in search results list ───────
+            # Google Hotels search returns a list — find our hotel and click it
+            try:
+                # Wait for hotel cards to appear
+                await page.wait_for_selector(
+                    '[data-hotelid], [jsname="aXgaGb"], .BcKAgd, [data-ved] h2, .OSrXXb',
+                    timeout=10_000
+                )
+            except PWTimeout:
+                pass
 
-            for i in range(min(count, 10)):  # cap at 10 providers per hotel
+            # Click first hotel result (should match our search query)
+            clicked = False
+            for card_sel in [
+                '[data-hotelid]',
+                '[jsname="aXgaGb"]',
+                '.BcKAgd',
+                'li[data-ved]',
+                '[role="article"]',
+            ]:
                 try:
-                    row = price_rows.nth(i)
-                    row_text = await row.inner_text()
+                    card = page.locator(card_sel).first
+                    if await card.count() > 0:
+                        await card.click()
+                        await page.wait_for_timeout(2500)
+                        clicked = True
+                        break
+                except Exception:
+                    pass
 
-                    # Extract provider name
-                    provider = "Unknown"
-                    try:
-                        prov_el = row.locator('[data-provider-name], .vQlnEc, .GZnc6d')
-                        if await prov_el.count() > 0:
-                            provider = (await prov_el.first.inner_text()).strip()
-                    except Exception:
-                        pass
+            # ── Strategy 2: extract prices from page ─────────────────────────
+            # Try multiple selector patterns Google has used
+            price_selectors = [
+                # Prices panel / booking options
+                '[jsname="priceRow"]',
+                '[data-price]',
+                '.kCsRcb',
+                '[jscontroller="rTuANe"]',
+                # Provider rows in rates panel
+                '.GZnc6d',
+                '[data-provider]',
+                # Rate cards
+                '.vQlnEc',
+                '[jsname="MfMn2b"]',
+                # Generic price spans
+                'span[aria-label*="$"]',
+                'div[aria-label*="$"]',
+            ]
 
-                    # Extract price
-                    price = _parse_price(row_text)
-                    if not price:
+            for sel in price_selectors:
+                try:
+                    els = page.locator(sel)
+                    count = await els.count()
+                    if count == 0:
                         continue
 
-                    # Extract cancellable hint
-                    cancellable = None
-                    try:
-                        cancel_el = row.locator('[aria-label*="cancel"], [aria-label*="refund"]')
-                        if await cancel_el.count() > 0:
-                            label = await cancel_el.first.get_attribute("aria-label") or ""
-                            cancellable = "free cancel" in label.lower()
-                    except Exception:
-                        pass
+                    for i in range(min(count, 10)):
+                        try:
+                            el = els.nth(i)
+                            text = await el.inner_text()
+                            price = _parse_price(text)
+                            if not price:
+                                continue
 
-                    results.append({
-                        "provider": provider or "Google Hotels",
-                        "price": price,
-                        "room_type": None,
-                        "cancellable": cancellable,
-                    })
-                except Exception as e:
-                    logger.debug(f"Row parse error: {e}")
+                            # Try to extract provider name from nearby elements
+                            provider = "Google Hotels"
+                            for prov_sel in [
+                                '[data-provider-name]', '.vQlnEc', '.GZnc6d',
+                                'span[class*="provider"]', 'div[class*="partner"]'
+                            ]:
+                                try:
+                                    prov = el.locator(prov_sel).first
+                                    if await prov.count() > 0:
+                                        pname = (await prov.inner_text()).strip()
+                                        if pname and len(pname) < 40:
+                                            provider = pname
+                                            break
+                                except Exception:
+                                    pass
 
-            # If we got at least one result, we're done
-            if results:
-                logger.info(
-                    f"  ✓ {hotel['name']} | {check_in} → {check_out} | "
-                    f"{len(results)} provider(s) found"
-                )
-                break
+                            # Dedup by price+provider
+                            if not any(
+                                r["price"] == price and r["provider"] == provider
+                                for r in results
+                            ):
+                                results.append({
+                                    "provider": provider,
+                                    "price": price,
+                                    "room_type": None,
+                                    "cancellable": None,
+                                })
+                        except Exception:
+                            pass
 
-            # No results — maybe we landed on search results list
-            # Try extracting the lowest price from the list view
-            list_prices = page.locator('[data-price], .kCsRcb span[aria-label*="$"]')
-            list_count = await list_prices.count()
-            if list_count > 0:
-                for j in range(min(list_count, 3)):
-                    try:
-                        pt = await list_prices.nth(j).inner_text()
-                        price = _parse_price(pt)
-                        if price:
+                    if results:
+                        break
+                except Exception:
+                    pass
+
+            # ── Strategy 3: full page text scrape as last resort ─────────────
+            if not results:
+                try:
+                    full_text = await page.inner_text("body")
+                    import re
+                    # Find all dollar amounts on the page
+                    prices_found = re.findall(r'\$\s*(\d{2,4}(?:,\d{3})?)', full_text)
+                    for p_str in prices_found[:5]:
+                        price = float(p_str.replace(",", ""))
+                        if 50 < price < 20_000:
                             results.append({
                                 "provider": "Google Hotels",
                                 "price": price,
                                 "room_type": None,
                                 "cancellable": None,
                             })
-                    except Exception:
-                        pass
-                if results:
-                    break
+                            break  # just take the first reasonable price
+                except Exception:
+                    pass
 
-            logger.warning(f"  ⚠ No prices found for {hotel['name']} ({check_in}), attempt {attempt+1}")
+            if results:
+                logger.info(
+                    f"  ✓ {hotel['name']} | {check_in} → {check_out} | "
+                    f"{len(results)} price(s) | "
+                    f"lowest ${min(r['price'] for r in results):.0f}"
+                )
+                break
+
+            logger.warning(
+                f"  ⚠ No prices found for {hotel['name']} ({check_in}), attempt {attempt+1}"
+            )
 
         except PWTimeout:
             logger.warning(f"  Timeout for {hotel['name']} attempt {attempt+1}")
