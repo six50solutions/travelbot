@@ -1,0 +1,76 @@
+name: Travel Tracker — Manual Price Check
+
+on:
+  workflow_dispatch:
+    inputs:
+      hotel_name:
+        description: "Hotel name (partial match OK)"
+        required: false
+        type: string
+      check_in:
+        description: "Check-in date (YYYY-MM-DD)"
+        required: false
+        type: string
+      nights:
+        description: "Number of nights"
+        required: false
+        type: string
+        default: "3"
+      show_lows:
+        description: "Show all current historic lows"
+        type: boolean
+        default: false
+      trip_id:
+        description: "Trip UUID for summary view"
+        required: false
+        type: string
+
+jobs:
+  price-check:
+    name: On-Demand Price Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          python -m playwright install chromium
+          python -m playwright install-deps chromium
+
+      - name: Run price check
+        env:
+          SUPABASE_DB_URL:     ${{ secrets.SUPABASE_DB_URL }}
+          AZURE_TENANT_ID:     ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID:     ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          NOTIFY_FROM_EMAIL:   ${{ secrets.NOTIFY_FROM_EMAIL }}
+          NOTIFY_TO_EMAIL:     ${{ secrets.NOTIFY_TO_EMAIL }}
+        run: |
+          if [ "${{ github.event.inputs.show_lows }}" = "true" ]; then
+            python bot/price_check.py --lows
+
+          elif [ -n "${{ github.event.inputs.trip_id }}" ]; then
+            python bot/price_check.py --trip-id "${{ github.event.inputs.trip_id }}" --summary
+
+          elif [ -n "${{ github.event.inputs.hotel_name }}" ] && [ -n "${{ github.event.inputs.check_in }}" ]; then
+            python bot/price_check.py \
+              --hotel "${{ github.event.inputs.hotel_name }}" \
+              --check-in "${{ github.event.inputs.check_in }}" \
+              --nights "${{ github.event.inputs.nights }}"
+
+          elif [ -n "${{ github.event.inputs.hotel_name }}" ]; then
+            python bot/price_check.py --hotel "${{ github.event.inputs.hotel_name }}" --cheapest
+
+          else
+            python bot/price_check.py --list-trips
+            python bot/price_check.py --lows
+          fi

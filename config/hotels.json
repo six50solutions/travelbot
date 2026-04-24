@@ -1,0 +1,43 @@
+{
+  "_comment": "Your curated hotel list. Add up to ~50. search_query is what gets typed into Google Hotels.",
+  "hotels": [
+    {
+      "name": "The Langham Chicago",
+      "location": "Chicago, IL",
+      "search_query": "The Langham Chicago",
+      "tags": ["luxury", "business", "downtown"]
+    },
+    {
+      "name": "Virgin Hotels Chicago",
+      "location": "Chicago, IL",
+      "search_query": "Virgin Hotels Chicago",
+      "tags": ["boutique", "trendy"]
+    },
+    {
+      "name": "Ace Hotel New York",
+      "location": "New York, NY",
+      "search_query": "Ace Hotel New York",
+      "tags": ["boutique", "nomad"]
+    }
+  ],
+  "trips": [
+    {
+      "name": "Chicago Weekend August",
+      "destination": "Chicago, IL",
+      "origin": "ORD",
+      "check_in_start": "2026-08-01",
+      "check_in_end": "2026-08-31",
+      "durations": [2, 3],
+      "adults": 2
+    },
+    {
+      "name": "NYC Long Weekend",
+      "destination": "New York, NY",
+      "origin": "ORD",
+      "check_in_start": "2026-09-01",
+      "check_in_end": "2026-09-30",
+      "durations": [3, 4],
+      "adults": 2
+    }
+  ]
+}

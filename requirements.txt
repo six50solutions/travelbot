@@ -1,0 +1,14 @@
+# Travel Tracker — Python Dependencies
+
+# Playwright (browser automation / scraping)
+playwright==1.44.0
+
+# Database
+psycopg2-binary==2.9.9
+
+# Microsoft Authentication (reuse from AI COO setup)
+msal==1.28.0
+requests==2.32.3
+
+# Utilities
+python-dotenv==1.0.1
