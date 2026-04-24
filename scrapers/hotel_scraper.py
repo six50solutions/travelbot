@@ -85,11 +85,49 @@ def build_google_hotels_url(search_query: str, check_in: date,
 DEBUG_SCREENSHOTS = os.environ.get("DEBUG_SCREENSHOTS", "0") == "1"
 
 
+DEBUG_SCREENSHOTS = os.environ.get("DEBUG_SCREENSHOTS", "0") == "1"
+
+
+async def dismiss_modals(page):
+    """Dismiss survey, consent, and cookie banners."""
+    # Satisfaction survey — click the X button
+    for sel in [
+        'button[aria-label="Close"]',
+        'button[aria-label="Dismiss"]',
+        'div[role="dialog"] button[jsname="VnRlmb"]',  # Google survey X
+        'div[role="dialog"] button:has-text("Next")',
+        'div[jsname="haAclf"] button',                 # survey close
+    ]:
+        try:
+            btn = page.locator(sel).first
+            if await btn.count() > 0:
+                await btn.click()
+                await page.wait_for_timeout(500)
+        except Exception:
+            pass
+
+    # Cookie / consent banners
+    for text in ["Accept all", "I agree", "Agree", "Accept", "Reject all"]:
+        try:
+            btn = page.locator(f'button:has-text("{text}")').first
+            if await btn.count() > 0:
+                await btn.click()
+                await page.wait_for_timeout(800)
+                break
+        except Exception:
+            pass
+
+
 async def scrape_google_hotels(page, hotel: dict, check_in: date,
                                 check_out: date, adults: int = 2) -> list[dict]:
     """
     Navigate to Google Hotels for a specific hotel + dates.
     Returns list of {provider, price, room_type, cancellable}
+
+    Based on observed DOM (Apr 2026):
+    - Page opens with hotel detail panel already showing "All options"
+    - Provider rows: each row has provider name text + price text like "$642"
+    - A satisfaction survey modal may appear — must dismiss first
     """
     url = build_google_hotels_url(hotel["search_query"], check_in, check_out, adults)
     results = []
@@ -97,161 +135,130 @@ async def scrape_google_hotels(page, hotel: dict, check_in: date,
     for attempt in range(MAX_RETRIES + 1):
         try:
             await page.goto(url, wait_until="networkidle", timeout=45_000)
-            await page.wait_for_timeout(random.randint(2500, 4500))
+            await page.wait_for_timeout(random.randint(2000, 3500))
 
-            # ── Dismiss consent / cookie banner ─────────────────────────────
-            for consent_text in ["Accept all", "I agree", "Agree", "Accept"]:
-                try:
-                    btn = page.locator(f'button:has-text("{consent_text}")')
-                    if await btn.count() > 0:
-                        await btn.first.click()
-                        await page.wait_for_timeout(1500)
-                        break
-                except Exception:
-                    pass
+            # ── Dismiss any modal overlays ───────────────────────────────────
+            await dismiss_modals(page)
+            await page.wait_for_timeout(600)
 
-            # ── Debug: save screenshot to see what we're working with ───────
+            # ── Debug screenshot ─────────────────────────────────────────────
             if DEBUG_SCREENSHOTS:
-                safe_name = hotel["name"].replace(" ", "_")[:30]
-                await page.screenshot(
-                    path=f"debug_{safe_name}_{check_in}.png",
-                    full_page=False
-                )
-                logger.info(f"  📸 Screenshot saved: debug_{safe_name}_{check_in}.png")
+                safe = hotel["name"].replace(" ", "_")[:25]
+                path = f"debug_{safe}_{check_in}.png"
+                await page.screenshot(path=path, full_page=False)
+                logger.info(f"  📸 {path}")
 
-            # ── Strategy 1: look for hotel card in search results list ───────
-            # Google Hotels search returns a list — find our hotel and click it
+            # ── Wait for "All options" section to appear ─────────────────────
             try:
-                # Wait for hotel cards to appear
                 await page.wait_for_selector(
-                    '[data-hotelid], [jsname="aXgaGb"], .BcKAgd, [data-ved] h2, .OSrXXb',
-                    timeout=10_000
+                    'h3:has-text("All options"), div:has-text("All options")',
+                    timeout=8_000
                 )
             except PWTimeout:
                 pass
 
-            # Click first hotel result (should match our search query)
-            clicked = False
-            for card_sel in [
-                '[data-hotelid]',
-                '[jsname="aXgaGb"]',
-                '.BcKAgd',
-                'li[data-ved]',
-                '[role="article"]',
-            ]:
-                try:
-                    card = page.locator(card_sel).first
-                    if await card.count() > 0:
-                        await card.click()
-                        await page.wait_for_timeout(2500)
-                        clicked = True
-                        break
-                except Exception:
-                    pass
+            # ── Extract provider rows from "All options" panel ───────────────
+            # Each row contains: [provider logo] [provider name] [price] [button]
+            # We walk each row, grab text, parse provider + price separately.
 
-            # ── Strategy 2: extract prices from page ─────────────────────────
-            # Try multiple selector patterns Google has used
-            price_selectors = [
-                # Prices panel / booking options
-                '[jsname="priceRow"]',
-                '[data-price]',
-                '.kCsRcb',
-                '[jscontroller="rTuANe"]',
-                # Provider rows in rates panel
-                '.GZnc6d',
-                '[data-provider]',
-                # Rate cards
-                '.vQlnEc',
-                '[jsname="MfMn2b"]',
-                # Generic price spans
-                'span[aria-label*="$"]',
-                'div[aria-label*="$"]',
+            # Rows are siblings inside the options container
+            row_selectors = [
+                # Direct provider row containers seen in DOM
+                'div[jsname="MfMn2b"]',          # rate row wrapper
+                'div[jsname="K0oMnc"]',          # alternate row wrapper
+                '.a9jlfd',                        # provider row class
+                '[data-ved] div[role="row"]',
+                # Fallback: any clickable row near a dollar sign
+                'a[href*="booking"], a[href*="expedia"], a[href*="hotels.com"]',
             ]
 
-            for sel in price_selectors:
-                try:
-                    els = page.locator(sel)
-                    count = await els.count()
-                    if count == 0:
-                        continue
+            for row_sel in row_selectors:
+                rows = page.locator(row_sel)
+                count = await rows.count()
+                if count == 0:
+                    continue
 
-                    for i in range(min(count, 10)):
-                        try:
-                            el = els.nth(i)
-                            text = await el.inner_text()
-                            price = _parse_price(text)
-                            if not price:
-                                continue
+                for i in range(min(count, 12)):
+                    try:
+                        row = rows.nth(i)
+                        row_text = await row.inner_text()
 
-                            # Try to extract provider name from nearby elements
-                            provider = "Google Hotels"
-                            for prov_sel in [
-                                '[data-provider-name]', '.vQlnEc', '.GZnc6d',
-                                'span[class*="provider"]', 'div[class*="partner"]'
-                            ]:
-                                try:
-                                    prov = el.locator(prov_sel).first
-                                    if await prov.count() > 0:
-                                        pname = (await prov.inner_text()).strip()
-                                        if pname and len(pname) < 40:
-                                            provider = pname
-                                            break
-                                except Exception:
-                                    pass
+                        price = _parse_price(row_text)
+                        if not price:
+                            continue
 
-                            # Dedup by price+provider
-                            if not any(
-                                r["price"] == price and r["provider"] == provider
-                                for r in results
-                            ):
-                                results.append({
-                                    "provider": provider,
-                                    "price": price,
-                                    "room_type": None,
-                                    "cancellable": None,
-                                })
-                        except Exception:
-                            pass
+                        # Extract provider: first non-price, non-button line
+                        provider = _extract_provider_from_text(row_text)
 
-                    if results:
-                        break
-                except Exception:
-                    pass
-
-            # ── Strategy 3: full page text scrape as last resort ─────────────
-            if not results:
-                try:
-                    full_text = await page.inner_text("body")
-                    import re
-                    # Find all dollar amounts on the page
-                    prices_found = re.findall(r'\$\s*(\d{2,4}(?:,\d{3})?)', full_text)
-                    for p_str in prices_found[:5]:
-                        price = float(p_str.replace(",", ""))
-                        if 50 < price < 20_000:
+                        if not any(r["price"] == price and r["provider"] == provider
+                                   for r in results):
                             results.append({
-                                "provider": "Google Hotels",
+                                "provider": provider,
                                 "price": price,
                                 "room_type": None,
-                                "cancellable": None,
+                                "cancellable": "free cancel" in row_text.lower(),
                             })
-                            break  # just take the first reasonable price
-                except Exception:
-                    pass
+                    except Exception:
+                        pass
+
+                if results:
+                    break
+
+            # ── Fallback: scan entire page text for price + provider pairs ───
+            if not results:
+                try:
+                    # Get all text nodes near dollar signs using JS
+                    price_data = await page.evaluate("""
+                        () => {
+                            const results = [];
+                            // Find all elements containing $ amounts
+                            const walker = document.createTreeWalker(
+                                document.body, NodeFilter.SHOW_TEXT
+                            );
+                            let node;
+                            while (node = walker.nextNode()) {
+                                const text = node.textContent.trim();
+                                if (/\\$\\d{2,4}/.test(text) && text.length < 20) {
+                                    // Get parent context
+                                    const parent = node.parentElement;
+                                    const container = parent?.closest('div[jsname], li, [role="row"]');
+                                    const containerText = container?.innerText || text;
+                                    results.push(containerText.substring(0, 200));
+                                }
+                            }
+                            return results.slice(0, 15);
+                        }
+                    """)
+
+                    seen = set()
+                    for text in price_data:
+                        price = _parse_price(text)
+                        if price and price not in seen and 50 < price < 25_000:
+                            seen.add(price)
+                            provider = _extract_provider_from_text(text)
+                            results.append({
+                                "provider": provider,
+                                "price": price,
+                                "room_type": None,
+                                "cancellable": "free cancel" in text.lower(),
+                            })
+                except Exception as e:
+                    logger.debug(f"JS fallback error: {e}")
 
             if results:
                 logger.info(
                     f"  ✓ {hotel['name']} | {check_in} → {check_out} | "
-                    f"{len(results)} price(s) | "
+                    f"{len(results)} provider(s) | "
                     f"lowest ${min(r['price'] for r in results):.0f}"
                 )
                 break
 
             logger.warning(
-                f"  ⚠ No prices found for {hotel['name']} ({check_in}), attempt {attempt+1}"
+                f"  ⚠ No prices found for {hotel['name']} ({check_in}), attempt {attempt + 1}"
             )
 
         except PWTimeout:
-            logger.warning(f"  Timeout for {hotel['name']} attempt {attempt+1}")
+            logger.warning(f"  Timeout for {hotel['name']} attempt {attempt + 1}")
         except Exception as e:
             logger.error(f"  Error scraping {hotel['name']}: {e}")
 
@@ -259,6 +266,26 @@ async def scrape_google_hotels(page, hotel: dict, check_in: date,
             await page.wait_for_timeout(random.randint(3000, 6000))
 
     return results
+
+
+def _extract_provider_from_text(text: str) -> str:
+    """Pull provider name from a row's text content."""
+    known = [
+        "The Langham", "Expedia", "Booking.com", "Hotels.com", "Priceline",
+        "Hilton", "Marriott", "Hyatt", "IHG", "Agoda", "Orbitz", "Travelocity",
+        "Trip.com", "HotelsCombined", "Kayak", "CheapTickets", "Direct",
+        "Official Site", "Hotel Website",
+    ]
+    for p in known:
+        if p.lower() in text.lower():
+            return p
+    # Return first short capitalized word as fallback
+    import re
+    words = re.findall(r'\b[A-Z][a-zA-Z\.]{2,20}\b', text)
+    for w in words:
+        if w not in ("Get", "Visit", "View", "Check", "Free", "Book", "Site", "More"):
+            return w
+    return "Google Hotels"
 
 
 def _parse_price(text: str) -> float | None:
