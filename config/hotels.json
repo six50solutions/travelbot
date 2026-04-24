@@ -1,43 +1,167 @@
 {
-  "_comment": "Your curated hotel list. Add up to ~50. search_query is what gets typed into Google Hotels.",
   "hotels": [
-    {
-      "name": "The Langham Chicago",
-      "location": "Chicago, IL",
-      "search_query": "The Langham Chicago",
-      "tags": ["luxury", "business", "downtown"]
-    },
-    {
-      "name": "Virgin Hotels Chicago",
-      "location": "Chicago, IL",
-      "search_query": "Virgin Hotels Chicago",
-      "tags": ["boutique", "trendy"]
-    },
-    {
-      "name": "Ace Hotel New York",
-      "location": "New York, NY",
-      "search_query": "Ace Hotel New York",
-      "tags": ["boutique", "nomad"]
-    }
+    { "name": "Grand Hyatt Maui", "location": "Wailea, Maui, HI", "search_query": "Grand Hyatt Maui Resort and Spa", "tags": ["hyatt", "hawaii", "maui", "resort", "beach"] },
+    { "name": "Andaz Maui at Wailea", "location": "Wailea, Maui, HI", "search_query": "Andaz Maui at Wailea Resort", "tags": ["hyatt", "hawaii", "maui", "luxury", "beach"] },
+    { "name": "Marriott Maui Ocean Club", "location": "Lahaina, Maui, HI", "search_query": "Marriott Maui Ocean Club Lahaina", "tags": ["marriott", "hawaii", "maui", "beach"] },
+    { "name": "Wailea Beach Resort Marriott", "location": "Wailea, Maui, HI", "search_query": "Wailea Beach Resort Marriott Maui", "tags": ["marriott", "hawaii", "maui", "resort", "beach"] },
+    { "name": "Hilton Hawaiian Village Waikiki", "location": "Honolulu, Oahu, HI", "search_query": "Hilton Hawaiian Village Waikiki Beach Resort", "tags": ["hilton", "hawaii", "oahu", "waikiki", "resort"] },
+    { "name": "Hyatt Regency Waikiki", "location": "Honolulu, Oahu, HI", "search_query": "Hyatt Regency Waikiki Beach Resort and Spa", "tags": ["hyatt", "hawaii", "oahu", "waikiki"] },
+    { "name": "The Royal Hawaiian", "location": "Honolulu, Oahu, HI", "search_query": "The Royal Hawaiian a Luxury Collection Resort Waikiki", "tags": ["marriott", "hawaii", "oahu", "luxury", "waikiki"] },
+    { "name": "Hilton Waikoloa Village", "location": "Waikoloa, Big Island, HI", "search_query": "Hilton Waikoloa Village Big Island Hawaii", "tags": ["hilton", "hawaii", "big island", "resort"] },
+    { "name": "1 Hotel South Beach", "location": "Miami Beach, FL", "search_query": "1 Hotel South Beach Miami", "tags": ["luxury", "miami", "south beach"] },
+    { "name": "Nobu Hotel Miami Beach", "location": "Miami Beach, FL", "search_query": "Nobu Hotel Miami Beach", "tags": ["luxury", "miami", "south beach", "boutique"] },
+    { "name": "W South Beach", "location": "Miami Beach, FL", "search_query": "W South Beach Miami", "tags": ["marriott", "miami", "south beach", "luxury"] },
+    { "name": "JW Marriott Miami Turnberry", "location": "Aventura, FL", "search_query": "JW Marriott Miami Turnberry Resort and Spa", "tags": ["marriott", "miami", "resort", "spa"] },
+    { "name": "Conrad Miami", "location": "Miami, FL", "search_query": "Conrad Miami", "tags": ["hilton", "miami", "downtown", "luxury"] },
+    { "name": "Hyatt Regency Miami", "location": "Miami, FL", "search_query": "Hyatt Regency Miami", "tags": ["hyatt", "miami", "downtown"] },
+    { "name": "InterContinental Miami", "location": "Miami, FL", "search_query": "InterContinental Miami", "tags": ["ihg", "miami", "downtown"] },
+    { "name": "Hyatt Zilara Cancun", "location": "Cancun, Mexico", "search_query": "Hyatt Zilara Cancun adults only all-inclusive", "tags": ["hyatt", "cancun", "all-inclusive", "adults-only"] },
+    { "name": "Hyatt Ziva Cancun", "location": "Cancun, Mexico", "search_query": "Hyatt Ziva Cancun all-inclusive", "tags": ["hyatt", "cancun", "all-inclusive", "family"] },
+    { "name": "Hilton Cancun Mar Caribe", "location": "Cancun, Mexico", "search_query": "Hilton Cancun Mar Caribe All-Inclusive Resort", "tags": ["hilton", "cancun", "all-inclusive"] },
+    { "name": "Marriott Cancun Resort", "location": "Cancun, Mexico", "search_query": "Marriott Cancun Resort", "tags": ["marriott", "cancun", "resort", "beach"] },
+    { "name": "Live Aqua Beach Resort Cancun", "location": "Cancun, Mexico", "search_query": "Live Aqua Beach Resort Cancun adults only", "tags": ["cancun", "adults-only", "all-inclusive", "luxury"] },
+    { "name": "Grand Fiesta Americana Coral Beach", "location": "Cancun, Mexico", "search_query": "Grand Fiesta Americana Coral Beach Cancun", "tags": ["cancun", "luxury", "beach", "resort"] },
+    { "name": "Park Hyatt Paris Vendome", "location": "Paris, France", "search_query": "Park Hyatt Paris Vendome", "tags": ["hyatt", "paris", "luxury"] },
+    { "name": "Hilton Paris Opera", "location": "Paris, France", "search_query": "Hilton Paris Opera", "tags": ["hilton", "paris"] },
+    { "name": "InterContinental Paris le Grand", "location": "Paris, France", "search_query": "InterContinental Paris le Grand", "tags": ["ihg", "paris", "luxury"] },
+    { "name": "Park Hyatt London River Thames", "location": "London, UK", "search_query": "Park Hyatt London River Thames", "tags": ["hyatt", "london", "luxury"] },
+    { "name": "Hilton London Bankside", "location": "London, UK", "search_query": "Hilton London Bankside", "tags": ["hilton", "london"] },
+    { "name": "InterContinental London Park Lane", "location": "London, UK", "search_query": "InterContinental London Park Lane", "tags": ["ihg", "london", "luxury"] },
+    { "name": "The Marriott London Grosvenor Square", "location": "London, UK", "search_query": "Marriott London Grosvenor Square", "tags": ["marriott", "london", "luxury"] },
+    { "name": "Hilton Diagonal Mar Barcelona", "location": "Barcelona, Spain", "search_query": "Hilton Diagonal Mar Barcelona", "tags": ["hilton", "barcelona", "beach"] },
+    { "name": "Hyatt Regency Barcelona Tower", "location": "Barcelona, Spain", "search_query": "Hyatt Regency Barcelona Tower", "tags": ["hyatt", "barcelona"] },
+    { "name": "Waldorf Astoria Rome Cavalieri", "location": "Rome, Italy", "search_query": "Waldorf Astoria Rome Cavalieri", "tags": ["hilton", "rome", "luxury"] },
+    { "name": "InterContinental Rome Ambasciatori Palace", "location": "Rome, Italy", "search_query": "InterContinental Rome Ambasciatori Palace", "tags": ["ihg", "rome", "luxury"] },
+    { "name": "Hyatt Regency Amsterdam", "location": "Amsterdam, Netherlands", "search_query": "Hyatt Regency Amsterdam", "tags": ["hyatt", "amsterdam"] },
+    { "name": "Hilton Amsterdam", "location": "Amsterdam, Netherlands", "search_query": "Hilton Amsterdam", "tags": ["hilton", "amsterdam"] },
+    { "name": "Park Hyatt Tokyo", "location": "Tokyo, Japan", "search_query": "Park Hyatt Tokyo Shinjuku", "tags": ["hyatt", "tokyo", "luxury"] },
+    { "name": "Grand Hyatt Tokyo", "location": "Tokyo, Japan", "search_query": "Grand Hyatt Tokyo Roppongi", "tags": ["hyatt", "tokyo"] },
+    { "name": "Conrad Tokyo", "location": "Tokyo, Japan", "search_query": "Conrad Tokyo Shiodome", "tags": ["hilton", "tokyo", "luxury"] },
+    { "name": "InterContinental Tokyo Bay", "location": "Tokyo, Japan", "search_query": "InterContinental Tokyo Bay", "tags": ["ihg", "tokyo"] },
+    { "name": "Grand Hyatt Erawan Bangkok", "location": "Bangkok, Thailand", "search_query": "Grand Hyatt Erawan Bangkok", "tags": ["hyatt", "bangkok", "luxury"] },
+    { "name": "Conrad Bangkok", "location": "Bangkok, Thailand", "search_query": "Conrad Bangkok", "tags": ["hilton", "bangkok", "luxury"] },
+    { "name": "InterContinental Bangkok", "location": "Bangkok, Thailand", "search_query": "InterContinental Bangkok", "tags": ["ihg", "bangkok"] },
+    { "name": "Conrad Singapore Orchard", "location": "Singapore", "search_query": "Conrad Singapore Orchard", "tags": ["hilton", "singapore", "luxury"] },
+    { "name": "Grand Hyatt Singapore", "location": "Singapore", "search_query": "Grand Hyatt Singapore", "tags": ["hyatt", "singapore"] },
+    { "name": "InterContinental Singapore", "location": "Singapore", "search_query": "InterContinental Singapore", "tags": ["ihg", "singapore", "luxury"] },
+    { "name": "Grand Hyatt Bali", "location": "Nusa Dua, Bali, Indonesia", "search_query": "Grand Hyatt Bali Nusa Dua", "tags": ["hyatt", "bali", "resort", "beach"] },
+    { "name": "Conrad Bali", "location": "Tanjung Benoa, Bali, Indonesia", "search_query": "Conrad Bali Resort", "tags": ["hilton", "bali", "resort", "beach"] },
+    { "name": "Marriott Bali Nusa Dua Gardens", "location": "Nusa Dua, Bali, Indonesia", "search_query": "Marriott Bali Nusa Dua Gardens", "tags": ["marriott", "bali", "resort"] },
+    { "name": "Conrad Dubai", "location": "Dubai, UAE", "search_query": "Conrad Dubai", "tags": ["hilton", "dubai", "luxury"] },
+    { "name": "Grand Hyatt Dubai", "location": "Dubai, UAE", "search_query": "Grand Hyatt Dubai", "tags": ["hyatt", "dubai"] },
+    { "name": "InterContinental Dubai Marina", "location": "Dubai, UAE", "search_query": "InterContinental Dubai Marina", "tags": ["ihg", "dubai"] },
+    { "name": "JW Marriott Marquis Dubai", "location": "Dubai, UAE", "search_query": "JW Marriott Marquis Hotel Dubai", "tags": ["marriott", "dubai", "luxury"] }
   ],
   "trips": [
     {
-      "name": "Chicago Weekend August",
-      "destination": "Chicago, IL",
+      "name": "Hawaii — Maui Summer",
+      "destination": "Maui, HI",
       "origin": "ORD",
-      "check_in_start": "2026-08-01",
-      "check_in_end": "2026-08-31",
-      "durations": [2, 3],
-      "adults": 2
+      "check_in_start": "2026-06-15",
+      "check_in_end": "2026-07-31",
+      "durations": [5, 7],
+      "adults": 2,
+      "hotels": ["Grand Hyatt Maui", "Andaz Maui at Wailea", "Marriott Maui Ocean Club", "Wailea Beach Resort Marriott"]
     },
     {
-      "name": "NYC Long Weekend",
-      "destination": "New York, NY",
+      "name": "Hawaii — Oahu Summer",
+      "destination": "Honolulu, HI",
+      "origin": "ORD",
+      "check_in_start": "2026-06-15",
+      "check_in_end": "2026-07-31",
+      "durations": [5, 7],
+      "adults": 2,
+      "hotels": ["Hilton Hawaiian Village Waikiki", "Hyatt Regency Waikiki", "The Royal Hawaiian"]
+    },
+    {
+      "name": "Miami Long Weekend",
+      "destination": "Miami Beach, FL",
+      "origin": "ORD",
+      "check_in_start": "2026-05-01",
+      "check_in_end": "2026-05-31",
+      "durations": [3, 4],
+      "adults": 2,
+      "hotels": ["1 Hotel South Beach", "Nobu Hotel Miami Beach", "W South Beach", "Conrad Miami", "Hyatt Regency Miami"]
+    },
+    {
+      "name": "Cancun All-Inclusive",
+      "destination": "Cancun, Mexico",
+      "origin": "ORD",
+      "check_in_start": "2026-06-01",
+      "check_in_end": "2026-08-31",
+      "durations": [5, 7],
+      "adults": 2,
+      "hotels": ["Hyatt Zilara Cancun", "Hyatt Ziva Cancun", "Hilton Cancun Mar Caribe", "Marriott Cancun Resort", "Live Aqua Beach Resort Cancun", "Grand Fiesta Americana Coral Beach"]
+    },
+    {
+      "name": "Europe — Paris",
+      "destination": "Paris, France",
       "origin": "ORD",
       "check_in_start": "2026-09-01",
-      "check_in_end": "2026-09-30",
-      "durations": [3, 4],
-      "adults": 2
+      "check_in_end": "2026-10-15",
+      "durations": [4, 5, 7],
+      "adults": 2,
+      "hotels": ["Park Hyatt Paris Vendome", "Hilton Paris Opera", "InterContinental Paris le Grand"]
+    },
+    {
+      "name": "Europe — London",
+      "destination": "London, UK",
+      "origin": "ORD",
+      "check_in_start": "2026-09-01",
+      "check_in_end": "2026-10-15",
+      "durations": [4, 5, 7],
+      "adults": 2,
+      "hotels": ["Park Hyatt London River Thames", "Hilton London Bankside", "InterContinental London Park Lane", "The Marriott London Grosvenor Square"]
+    },
+    {
+      "name": "Europe — Barcelona + Rome",
+      "destination": "Barcelona, Spain",
+      "origin": "ORD",
+      "check_in_start": "2026-09-01",
+      "check_in_end": "2026-10-31",
+      "durations": [4, 5],
+      "adults": 2,
+      "hotels": ["Hilton Diagonal Mar Barcelona", "Hyatt Regency Barcelona Tower", "Waldorf Astoria Rome Cavalieri", "InterContinental Rome Ambasciatori Palace"]
+    },
+    {
+      "name": "Asia — Tokyo",
+      "destination": "Tokyo, Japan",
+      "origin": "ORD",
+      "check_in_start": "2026-10-01",
+      "check_in_end": "2026-11-30",
+      "durations": [7, 10],
+      "adults": 2,
+      "hotels": ["Park Hyatt Tokyo", "Grand Hyatt Tokyo", "Conrad Tokyo", "InterContinental Tokyo Bay"]
+    },
+    {
+      "name": "Asia — Singapore + Bangkok",
+      "destination": "Singapore",
+      "origin": "ORD",
+      "check_in_start": "2026-10-01",
+      "check_in_end": "2026-11-30",
+      "durations": [5, 7],
+      "adults": 2,
+      "hotels": ["Conrad Singapore Orchard", "Grand Hyatt Singapore", "InterContinental Singapore", "Grand Hyatt Erawan Bangkok", "Conrad Bangkok", "InterContinental Bangkok"]
+    },
+    {
+      "name": "Bali Retreat",
+      "destination": "Bali, Indonesia",
+      "origin": "ORD",
+      "check_in_start": "2026-11-01",
+      "check_in_end": "2026-12-15",
+      "durations": [7, 10],
+      "adults": 2,
+      "hotels": ["Grand Hyatt Bali", "Conrad Bali", "Marriott Bali Nusa Dua Gardens"]
+    },
+    {
+      "name": "Dubai",
+      "destination": "Dubai, UAE",
+      "origin": "ORD",
+      "check_in_start": "2026-11-01",
+      "check_in_end": "2026-12-31",
+      "durations": [5, 7],
+      "adults": 2,
+      "hotels": ["Conrad Dubai", "Grand Hyatt Dubai", "InterContinental Dubai Marina", "JW Marriott Marquis Dubai"]
     }
   ]
 }
