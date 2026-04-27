@@ -310,6 +310,12 @@ async def run_hotel_scraper(trip_id_filter: str = None, dry_run: bool = False):
     if trip_id_filter:
         trips = [t for t in trips if str(t["id"]) == trip_id_filter]
 
+    # TRIP_FILTER env var: comma-separated trip names (used by parallel GH Actions jobs)
+    trip_name_filter = os.environ.get("TRIP_FILTER", "").strip()
+    if trip_name_filter:
+        names = [n.strip() for n in trip_name_filter.split(",")]
+        trips = [t for t in trips if t["name"] in names]
+
     if not trips:
         logger.warning("No active trips found. Add trips via Supabase or hotels.json loader.")
         return

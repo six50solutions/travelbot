@@ -12,37 +12,22 @@ on:
         description: "Dry run (no DB writes, no email)"
         type: boolean
         default: false
-      scraper:
-        description: "Which scraper to run"
-        type: choice
-        options:
-          - both
-          - hotels
-          - flights
-        default: both
 
 jobs:
-  # ── Job 1: Hotel Scraper ──────────────────────────────────────────────────
-  scrape-hotels:
-    name: Hotel Price Scraper
+  # ── Job 1: Americas Hotels (Hawaii + Miami + Cancun) ─────────────────────
+  scrape-hotels-americas:
+    name: Hotels — Americas
     runs-on: ubuntu-latest
     timeout-minutes: 90
-    if: >
-      github.event_name == 'schedule' ||
-      (github.event_name == 'workflow_dispatch' &&
-       (github.event.inputs.scraper == 'both' || github.event.inputs.scraper == 'hotels'))
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
 
-      - name: Install system dependencies (Ubuntu 24 fix)
+      - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -50,12 +35,12 @@ jobs:
             libdrm2 libgbm1 libgtk-3-0 libnspr4 libnss3 libxcomposite1 \
             libxdamage1 libxfixes3 libxkbcommon0 libxrandr2 xvfb
 
-      - name: Install Python dependencies and Chromium
+      - name: Install Python deps and Chromium
         run: |
           pip install -r requirements.txt
           python -m playwright install chromium
 
-      - name: Run hotel scraper
+      - name: Run hotel scraper — Americas
         env:
           SUPABASE_DB_URL:     ${{ secrets.SUPABASE_DB_URL }}
           AZURE_TENANT_ID:     ${{ secrets.AZURE_TENANT_ID }}
@@ -63,42 +48,25 @@ jobs:
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
           NOTIFY_FROM_EMAIL:   ${{ secrets.NOTIFY_FROM_EMAIL }}
           NOTIFY_TO_EMAIL:     ${{ secrets.NOTIFY_TO_EMAIL }}
+          TRIP_FILTER:         "Hawaii — Maui,Hawaii — Oahu,Miami,Cancun"
         run: |
-          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
-            python scrapers/hotel_scraper.py --dry-run
-          else
-            python scrapers/hotel_scraper.py
-          fi
+          DRY="${{ github.event.inputs.dry_run }}"
+          python scrapers/hotel_scraper.py ${DRY:+--dry-run}
 
-      - name: Upload logs on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: hotel-scraper-logs-${{ github.run_id }}
-          path: "*.log"
-          retention-days: 7
-
-  # ── Job 2: Flight Scraper ─────────────────────────────────────────────────
-  scrape-flights:
-    name: Flight Price Scraper
+  # ── Job 2: Europe + Asia Hotels ───────────────────────────────────────────
+  scrape-hotels-intl:
+    name: Hotels — Europe + Asia
     runs-on: ubuntu-latest
     timeout-minutes: 90
-    if: >
-      github.event_name == 'schedule' ||
-      (github.event_name == 'workflow_dispatch' &&
-       (github.event.inputs.scraper == 'both' || github.event.inputs.scraper == 'flights'))
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
 
-      - name: Install system dependencies (Ubuntu 24 fix)
+      - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -106,7 +74,46 @@ jobs:
             libdrm2 libgbm1 libgtk-3-0 libnspr4 libnss3 libxcomposite1 \
             libxdamage1 libxfixes3 libxkbcommon0 libxrandr2 xvfb
 
-      - name: Install Python dependencies and Chromium
+      - name: Install Python deps and Chromium
+        run: |
+          pip install -r requirements.txt
+          python -m playwright install chromium
+
+      - name: Run hotel scraper — Europe + Asia
+        env:
+          SUPABASE_DB_URL:     ${{ secrets.SUPABASE_DB_URL }}
+          AZURE_TENANT_ID:     ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID:     ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          NOTIFY_FROM_EMAIL:   ${{ secrets.NOTIFY_FROM_EMAIL }}
+          NOTIFY_TO_EMAIL:     ${{ secrets.NOTIFY_TO_EMAIL }}
+          TRIP_FILTER:         "Europe — Paris,Europe — London,Europe — Barcelona + Rome,Asia — Tokyo,Asia — Singapore + Bangkok,Bali,Dubai"
+        run: |
+          DRY="${{ github.event.inputs.dry_run }}"
+          python scrapers/hotel_scraper.py ${DRY:+--dry-run}
+
+  # ── Job 3: Flights ────────────────────────────────────────────────────────
+  scrape-flights:
+    name: Flight Price Scraper
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libasound2t64 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
+            libdrm2 libgbm1 libgtk-3-0 libnspr4 libnss3 libxcomposite1 \
+            libxdamage1 libxfixes3 libxkbcommon0 libxrandr2 xvfb
+
+      - name: Install Python deps and Chromium
         run: |
           pip install -r requirements.txt
           python -m playwright install chromium
@@ -120,35 +127,23 @@ jobs:
           NOTIFY_FROM_EMAIL:   ${{ secrets.NOTIFY_FROM_EMAIL }}
           NOTIFY_TO_EMAIL:     ${{ secrets.NOTIFY_TO_EMAIL }}
         run: |
-          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
-            python scrapers/flight_scraper.py --dry-run
-          else
-            python scrapers/flight_scraper.py
-          fi
+          DRY="${{ github.event.inputs.dry_run }}"
+          python scrapers/flight_scraper.py ${DRY:+--dry-run}
 
-      - name: Upload logs on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: flight-scraper-logs-${{ github.run_id }}
-          path: "*.log"
-          retention-days: 7
-
-  # ── Job 3: Alert Engine ───────────────────────────────────────────────────
+  # ── Job 4: Alert Engine ───────────────────────────────────────────────────
   send-alerts:
     name: Alert Engine
     runs-on: ubuntu-latest
-    needs: [scrape-hotels, scrape-flights]
-    if: >
-      always() &&
-      (needs.scrape-hotels.result == 'success' || needs.scrape-flights.result == 'success')
+    needs: [scrape-hotels-americas, scrape-hotels-intl, scrape-flights]
+    if: always() && (
+      needs.scrape-hotels-americas.result == 'success' ||
+      needs.scrape-hotels-intl.result == 'success' ||
+      needs.scrape-flights.result == 'success'
+      )
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
@@ -166,8 +161,5 @@ jobs:
           NOTIFY_TO_EMAIL:     ${{ secrets.NOTIFY_TO_EMAIL }}
           ALERT_PCT_DROP:      "10"
         run: |
-          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
-            python alerts/alert_engine.py --dry-run
-          else
-            python alerts/alert_engine.py
-          fi
+          DRY="${{ github.event.inputs.dry_run }}"
+          python alerts/alert_engine.py ${DRY:+--dry-run}
