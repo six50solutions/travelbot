@@ -62,15 +62,27 @@ def _conn_params(url: str) -> dict:
 
 @contextmanager
 def get_conn():
-    conn = psycopg2.connect(**_conn_params(DATABASE_URL))
-    try:
-        yield conn
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        conn.close()
+    """Get a DB connection with retry logic for pooler timeouts."""
+    last_err = None
+    for attempt in range(3):
+        try:
+            conn = psycopg2.connect(**_conn_params(DATABASE_URL))
+            try:
+                yield conn
+                conn.commit()
+                return
+            except Exception:
+                conn.rollback()
+                raise
+            finally:
+                conn.close()
+        except psycopg2.OperationalError as e:
+            last_err = e
+            if attempt < 2:
+                import time
+                time.sleep(2 ** attempt)  # 1s, 2s backoff
+                continue
+            raise last_err
 
 
 def get_active_hotels() -> list[dict]:

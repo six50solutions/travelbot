@@ -26,6 +26,7 @@ jobs:
   scrape-hotels:
     name: Hotel Price Scraper
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     if: >
       github.event_name == 'schedule' ||
       (github.event_name == 'workflow_dispatch' &&
@@ -81,6 +82,7 @@ jobs:
   scrape-flights:
     name: Flight Price Scraper
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     if: >
       github.event_name == 'schedule' ||
       (github.event_name == 'workflow_dispatch' &&
