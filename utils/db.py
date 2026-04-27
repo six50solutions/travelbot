@@ -18,15 +18,43 @@ DATABASE_URL = os.environ["SUPABASE_DB_URL"]
 
 
 def _conn_params(url: str) -> dict:
-    """Parse postgres URI safely, handling special chars in password."""
-    from urllib.parse import urlparse, unquote
-    r = urlparse(url)
+    """
+    Parse postgres URI safely, handling ANY special chars in password
+    including @ which breaks urlparse.
+    Format: postgresql://user:password@host:port/dbname
+    Strategy: split on last @ to correctly isolate host from credentials.
+    """
+    import re
+    from urllib.parse import unquote
+
+    # Strip scheme
+    url = re.sub(r"^postgres(?:ql)?://", "", url)
+
+    # Split on LAST @ to get credentials vs host (handles @ in password)
+    at_pos = url.rfind("@")
+    credentials = url[:at_pos]
+    hostpart    = url[at_pos + 1:]
+
+    # Split credentials on FIRST : only
+    colon_pos = credentials.index(":")
+    user     = unquote(credentials[:colon_pos])
+    password = unquote(credentials[colon_pos + 1:])
+
+    # Split host:port/dbname
+    host_port, dbname = hostpart.split("/", 1)
+    if ":" in host_port:
+        host, port_str = host_port.rsplit(":", 1)
+        port = int(port_str)
+    else:
+        host = host_port
+        port = 5432
+
     return {
-        "host":            r.hostname,
-        "port":            r.port or 5432,
-        "dbname":          r.path.lstrip("/"),
-        "user":            unquote(r.username or ""),
-        "password":        unquote(r.password or ""),
+        "host":            host,
+        "port":            port,
+        "dbname":          dbname,
+        "user":            user,
+        "password":        password,
         "sslmode":         "require",
         "connect_timeout": 10,
     }
