@@ -17,9 +17,24 @@ DATABASE_URL = os.environ["SUPABASE_DB_URL"]
 # Format: postgresql://postgres:[password]@db.[project-ref].supabase.co:5432/postgres
 
 
+def _conn_params(url: str) -> dict:
+    """Parse postgres URI safely, handling special chars in password."""
+    from urllib.parse import urlparse, unquote
+    r = urlparse(url)
+    return {
+        "host":            r.hostname,
+        "port":            r.port or 5432,
+        "dbname":          r.path.lstrip("/"),
+        "user":            unquote(r.username or ""),
+        "password":        unquote(r.password or ""),
+        "sslmode":         "require",
+        "connect_timeout": 10,
+    }
+
+
 @contextmanager
 def get_conn():
-    conn = psycopg2.connect(DATABASE_URL)
+    conn = psycopg2.connect(**_conn_params(DATABASE_URL))
     try:
         yield conn
         conn.commit()
