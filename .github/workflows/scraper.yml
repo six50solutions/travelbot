@@ -41,19 +41,27 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      - name: Install dependencies
+      - name: Install system dependencies (Ubuntu 24 fix)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libasound2t64 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
+            libdrm2 libgbm1 libgtk-3-0 libnspr4 libnss3 libxcomposite1 \
+            libxdamage1 libxfixes3 libxkbcommon0 libxrandr2 xvfb
+
+      - name: Install Python dependencies and Chromium
         run: |
           pip install -r requirements.txt
-          python -m playwright install --with-deps chromium
+          python -m playwright install chromium
 
       - name: Run hotel scraper
         env:
-          SUPABASE_DB_URL:    ${{ secrets.SUPABASE_DB_URL }}
-          AZURE_TENANT_ID:    ${{ secrets.AZURE_TENANT_ID }}
-          AZURE_CLIENT_ID:    ${{ secrets.AZURE_CLIENT_ID }}
+          SUPABASE_DB_URL:     ${{ secrets.SUPABASE_DB_URL }}
+          AZURE_TENANT_ID:     ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID:     ${{ secrets.AZURE_CLIENT_ID }}
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-          NOTIFY_FROM_EMAIL:  ${{ secrets.NOTIFY_FROM_EMAIL }}
-          NOTIFY_TO_EMAIL:    ${{ secrets.NOTIFY_TO_EMAIL }}
+          NOTIFY_FROM_EMAIL:   ${{ secrets.NOTIFY_FROM_EMAIL }}
+          NOTIFY_TO_EMAIL:     ${{ secrets.NOTIFY_TO_EMAIL }}
         run: |
           if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
             python scrapers/hotel_scraper.py --dry-run
@@ -88,19 +96,27 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      - name: Install dependencies
+      - name: Install system dependencies (Ubuntu 24 fix)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libasound2t64 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
+            libdrm2 libgbm1 libgtk-3-0 libnspr4 libnss3 libxcomposite1 \
+            libxdamage1 libxfixes3 libxkbcommon0 libxrandr2 xvfb
+
+      - name: Install Python dependencies and Chromium
         run: |
           pip install -r requirements.txt
-          python -m playwright install --with-deps chromium
+          python -m playwright install chromium
 
       - name: Run flight scraper
         env:
-          SUPABASE_DB_URL:    ${{ secrets.SUPABASE_DB_URL }}
-          AZURE_TENANT_ID:    ${{ secrets.AZURE_TENANT_ID }}
-          AZURE_CLIENT_ID:    ${{ secrets.AZURE_CLIENT_ID }}
+          SUPABASE_DB_URL:     ${{ secrets.SUPABASE_DB_URL }}
+          AZURE_TENANT_ID:     ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID:     ${{ secrets.AZURE_CLIENT_ID }}
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-          NOTIFY_FROM_EMAIL:  ${{ secrets.NOTIFY_FROM_EMAIL }}
-          NOTIFY_TO_EMAIL:    ${{ secrets.NOTIFY_TO_EMAIL }}
+          NOTIFY_FROM_EMAIL:   ${{ secrets.NOTIFY_FROM_EMAIL }}
+          NOTIFY_TO_EMAIL:     ${{ secrets.NOTIFY_TO_EMAIL }}
         run: |
           if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
             python scrapers/flight_scraper.py --dry-run
@@ -117,7 +133,6 @@ jobs:
           retention-days: 7
 
   # ── Job 3: Alert Engine ───────────────────────────────────────────────────
-  # Runs after BOTH scrapers complete (regardless of which failed)
   send-alerts:
     name: Alert Engine
     runs-on: ubuntu-latest
