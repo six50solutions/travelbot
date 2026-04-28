@@ -1,7 +1,8 @@
 """
 scrapers/flight_scraper.py
-Scrapes Google Flights via Playwright for trips that have an origin defined.
-Saves results to flight_snapshots + updates flight_lows.
+Scrapes Google Flights directly via Playwright using IATA codes.
+Navigates to google.com/travel/flights with pre-filled origin/destination,
+then extracts flight rows from the results page.
 
 Usage:
     python scrapers/flight_scraper.py
@@ -11,8 +12,7 @@ Usage:
 
 import os
 import sys
-import json
-import time
+import re
 import random
 import asyncio
 import logging
@@ -36,55 +36,15 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-HEADLESS      = True
-REQUEST_DELAY = (5, 10)
-MAX_RETRIES   = 2
+HEADLESS     = True
+MAX_RETRIES  = 2
 
 USER_AGENTS = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
 ]
 
-
-# ── URL builder ─────────────────────────────────────────────────────────────────
-
-def build_google_flights_url(origin: str, destination: str,
-                              depart_date: date, return_date: date = None,
-                              adults: int = 2) -> str:
-    """
-    Google Flights URL for round-trip or one-way.
-    Uses the search URL format that pre-fills origin/destination/dates.
-    """
-    dep = depart_date.strftime("%Y-%m-%d")
-    if return_date:
-        ret = return_date.strftime("%Y-%m-%d")
-        trip_type = "2"  # round trip
-    else:
-        ret = ""
-        trip_type = "3"  # one way
-
-    # Google Flights URL format
-    # tfs= encodes the full trip in a compact format
-    # Simpler approach: use the query params that work in browser
-    base = "https://www.google.com/travel/flights"
-    params = (
-        f"?q=Flights+from+{quote_plus(origin)}+to+{quote_plus(destination)}"
-        f"&hl=en&gl=us&curr=USD"
-        f"&tfs=CBwQAhoeEgoyMDI2LTA4LTAxagcIARIDT1JEcgcIARIDTEFYGh4SCjIwMjYtMDgtMDVqBwgBEgNMQVhyBwgBEgNPUkQ"
-    )
-    # Better: direct search URL
-    direct = (
-        f"https://www.google.com/flights#flt="
-        f"{origin}.{destination}.{dep}"
-    )
-    if return_date:
-        direct += f"*{destination}.{origin}.{ret}"
-    direct += f";c:USD;e:1;sd:1;t:{'r' if return_date else 'o'}"
-
-    return direct
-
-
-# IATA code map for city destinations
+# IATA code map
 DESTINATION_IATA = {
     "Maui, HI": "OGG",
     "Honolulu, HI": "HNL",
@@ -104,220 +64,223 @@ DESTINATION_IATA = {
 }
 
 def get_iata(destination: str) -> str:
-    """Get IATA code for a destination, fallback to first 3 chars."""
     return DESTINATION_IATA.get(destination, destination[:3].upper())
 
 
-def build_flights_search_url(origin: str, destination: str,
+def build_google_flights_url(origin: str, destination: str,
                               depart_date: date, return_date: date = None) -> str:
-    """Build Google Flights URL using IATA codes."""
-    dep_iata = origin.upper()
+    """
+    Build Google Flights URL using natural language query.
+    The page auto-resolves IATA codes and fills in the search form.
+    """
     dst_iata = get_iata(destination)
-    dep_str = depart_date.strftime("%Y-%m-%d")
+    dep_str  = depart_date.strftime("%Y-%m-%d")
+
     if return_date:
         ret_str = return_date.strftime("%Y-%m-%d")
-        q = f"flights from {dep_iata} to {dst_iata} {dep_str} return {ret_str}"
+        q = f"Flights from {origin} to {dst_iata} on {dep_str} returning {ret_str}"
     else:
-        q = f"flights from {dep_iata} to {dst_iata} {dep_str}"
-    return f"https://www.google.com/search?q={quote_plus(q)}&hl=en&gl=us&curr=USD"
+        q = f"Flights from {origin} to {dst_iata} on {dep_str}"
+
+    return f"https://www.google.com/travel/flights?q={quote_plus(q)}&hl=en&curr=USD"
 
 
-# ── Scraper ─────────────────────────────────────────────────────────────────────
+async def dismiss_modals(page):
+    for text in ["Accept all", "I agree", "Agree", "Reject all"]:
+        try:
+            btn = page.locator(f'button:has-text("{text}")').first
+            if await btn.count() > 0:
+                await btn.click()
+                await page.wait_for_timeout(800)
+                break
+        except Exception:
+            pass
+
 
 async def scrape_google_flights(page, trip: dict, depart_date: date,
                                  return_date: date = None) -> list[dict]:
     """
     Scrape Google Flights for a specific route + dates.
-    Returns list of {airline, price, stops, duration_mins, provider}
+    Returns list of {airline, price, stops, duration_mins}
+
+    Based on observed DOM (Apr 2026):
+    - Flight rows are list items inside 'Top departing flights' / 'Other departing flights'
+    - Price: green span with $ amount, aria-label contains full price
+    - Airline: text node near logo image
+    - Stops: text like "1 stop" or "Nonstop"
+    - Duration: text like "12 hr 26 min"
     """
-    origin = trip.get("origin", "").upper()
+    origin      = trip.get("origin", "").upper()
     destination = trip.get("destination", "")
+    dst_iata    = get_iata(destination)
+    results     = []
 
-    if not origin:
-        logger.warning(f"Trip '{trip['name']}' has no origin — skipping flights")
-        return []
-
-    # Try the Google search result cards first (more scraping-friendly)
-    url = build_flights_search_url(origin, destination, depart_date, return_date)
-    results = []
+    url = build_google_flights_url(origin, destination, depart_date, return_date)
 
     for attempt in range(MAX_RETRIES + 1):
         try:
-            await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
+            await page.goto(url, wait_until="networkidle", timeout=45_000)
             await page.wait_for_timeout(random.randint(3000, 5000))
+            await dismiss_modals(page)
+            await page.wait_for_timeout(1000)
 
-            # ── Accept consent if shown ──────────────────────────────────────
+            # Wait for flight results to appear
             try:
-                consent = page.locator('button:has-text("Accept all"), [aria-label*="Accept"]')
-                if await consent.count() > 0:
-                    await consent.first.click()
-                    await page.wait_for_timeout(1500)
-            except Exception:
+                await page.wait_for_selector(
+                    'li[jsname], [jsname="IWWDBc"] li, ul[jsname] li',
+                    timeout=12_000
+                )
+            except PWTimeout:
                 pass
 
-            # ── Strategy 1: Google Flights widget in search results ──────────
-            # The rich result card shows flight prices
-            price_elements = page.locator(
-                '[data-price], [aria-label*="$"], '
-                '.YMlIz, .U3gSDe, [jscontroller="iSvg6e"]'
-            )
-            count = await price_elements.count()
+            # ── Extract flight rows via JavaScript ──────────────────────────
+            # Walk the DOM looking for elements that contain both a price and
+            # airline name — these are the flight result rows
+            flight_data = await page.evaluate("""
+                () => {
+                    const results = [];
 
-            if count == 0:
-                # ── Strategy 2: Navigate directly to Google Flights ──────────
-                flights_url = build_google_flights_url(
-                    origin, destination, depart_date, return_date
-                )
-                await page.goto(flights_url, wait_until="domcontentloaded", timeout=30_000)
-                await page.wait_for_timeout(random.randint(4000, 7000))
+                    // Find all list items that look like flight rows
+                    // They contain: airline name, time, duration, stops, price
+                    const rows = document.querySelectorAll(
+                        'li[jsname], [role="listitem"], ul li'
+                    );
 
-                # Wait for flight list to populate
-                try:
-                    await page.wait_for_selector(
-                        'li[class*="flight"], [data-ved][role="listitem"], '
-                        '[jsname="t7vRVb"], .pIav2d',
-                        timeout=15_000
-                    )
-                except PWTimeout:
-                    logger.warning(f"  Flights list timeout for {origin}→{destination} {depart_date}")
+                    for (const row of rows) {
+                        const text = row.innerText || '';
+                        if (!text.includes('$')) continue;
+                        if (text.length < 20 || text.length > 1000) continue;
 
-                price_elements = page.locator(
-                    '[data-price], [aria-label*="$"], '
-                    '.YMlIz, .U3gSDe, [jsname="cfb5o"], '
-                    'div[class*="price"] span'
-                )
-                count = await price_elements.count()
+                        // Must have a price pattern
+                        const priceMatch = text.match(/\\$(\\d{3,5})/);
+                        if (!priceMatch) continue;
+                        const price = parseFloat(priceMatch[1]);
+                        if (price < 150 || price > 20000) continue;
 
-            # ── Extract from flight result rows ──────────────────────────────
-            flight_rows = page.locator(
-                'li[class*="flight"], [data-ved][role="listitem"], '
-                '[jsname="t7vRVb"], .pIav2d, [data-ved] li'
-            )
-            row_count = await flight_rows.count()
+                        // Extract airline (first non-empty short line)
+                        const lines = text.split('\\n').map(l => l.trim()).filter(Boolean);
+                        let airline = 'Unknown';
+                        for (const line of lines) {
+                            if (line.length > 2 && line.length < 40 &&
+                                !line.includes('$') &&
+                                !line.match(/^\\d/) &&
+                                !line.includes('stop') &&
+                                !line.includes('hr') &&
+                                !line.includes('min') &&
+                                !line.includes('kg') &&
+                                !line.includes('ORD') &&
+                                !line.includes('emissions')) {
+                                airline = line;
+                                break;
+                            }
+                        }
 
-            for i in range(min(row_count, 8)):
-                try:
-                    row = flight_rows.nth(i)
-                    row_text = await row.inner_text()
+                        // Extract stops
+                        let stops = 0;
+                        if (text.includes('Nonstop') || text.includes('nonstop')) {
+                            stops = 0;
+                        } else if (text.match(/2 stops?/i)) {
+                            stops = 2;
+                        } else if (text.match(/1 stop/i)) {
+                            stops = 1;
+                        }
 
-                    price = _parse_flight_price(row_text)
-                    if not price:
-                        continue
+                        // Extract duration
+                        let duration_mins = null;
+                        const durMatch = text.match(/(\\d+) hr (\\d+) min/);
+                        if (durMatch) {
+                            duration_mins = parseInt(durMatch[1]) * 60 + parseInt(durMatch[2]);
+                        }
 
-                    # Airline
-                    airline = _extract_airline(row_text)
+                        results.push({
+                            price,
+                            airline,
+                            stops,
+                            duration_mins,
+                        });
+                    }
 
-                    # Stops
-                    stops = 0
-                    if "nonstop" in row_text.lower():
-                        stops = 0
-                    elif "1 stop" in row_text.lower():
-                        stops = 1
-                    elif "2 stop" in row_text.lower():
-                        stops = 2
+                    // Deduplicate by price+airline
+                    const seen = new Set();
+                    return results.filter(r => {
+                        const key = `${r.price}-${r.airline}`;
+                        if (seen.has(key)) return false;
+                        seen.add(key);
+                        return true;
+                    }).slice(0, 8);
+                }
+            """)
 
-                    # Duration
-                    duration = _parse_duration(row_text)
-
+            if flight_data:
+                for r in flight_data:
                     results.append({
-                        "airline": airline,
-                        "price": price,
-                        "stops": stops,
-                        "duration_mins": duration,
-                        "provider": "Google Flights",
+                        "airline":      r.get("airline", "Unknown"),
+                        "price":        float(r["price"]),
+                        "stops":        r.get("stops", 0),
+                        "duration_mins": r.get("duration_mins"),
+                        "provider":     "Google Flights",
                     })
-                except Exception as e:
-                    logger.debug(f"Row parse error: {e}")
-
-            # Fallback: grab price elements directly
-            if not results and count > 0:
-                seen_prices = set()
-                for i in range(min(count, 5)):
-                    try:
-                        el = price_elements.nth(i)
-                        text = await el.inner_text()
-                        price = _parse_flight_price(text)
-                        if price and price not in seen_prices:
-                            seen_prices.add(price)
-                            results.append({
-                                "airline": "Unknown",
-                                "price": price,
-                                "stops": None,
-                                "duration_mins": None,
-                                "provider": "Google Flights",
-                            })
-                    except Exception:
-                        pass
 
             if results:
+                lowest = min(r["price"] for r in results)
                 logger.info(
-                    f"  ✓ {origin}→{destination} | {depart_date} | "
-                    f"{len(results)} flight(s) found | "
-                    f"lowest ${min(r['price'] for r in results):.0f}"
+                    f"  ✓ {origin}→{dst_iata} | {depart_date} | "
+                    f"{len(results)} flight(s) | lowest ${lowest:.0f}"
                 )
                 break
 
-            logger.warning(f"  ⚠ No flights found for {origin}→{destination} {depart_date}, attempt {attempt+1}")
+            # Fallback: direct aria-label price extraction
+            price_els = page.locator('span[aria-label*="US dollars"], [aria-label*="round trip"]')
+            count = await price_els.count()
+            if count > 0:
+                for i in range(min(count, 5)):
+                    try:
+                        label = await price_els.nth(i).get_attribute("aria-label") or ""
+                        m = re.search(r'\$?([\d,]+)', label)
+                        if m:
+                            price = float(m.group(1).replace(",", ""))
+                            if 150 < price < 20_000:
+                                results.append({
+                                    "airline": "Unknown",
+                                    "price": price,
+                                    "stops": None,
+                                    "duration_mins": None,
+                                    "provider": "Google Flights",
+                                })
+                    except Exception:
+                        pass
+                if results:
+                    break
+
+            logger.warning(
+                f"  ⚠ No flights found for {origin}→{dst_iata} {depart_date}, "
+                f"attempt {attempt + 1}"
+            )
 
         except PWTimeout:
-            logger.warning(f"  Timeout for {origin}→{destination} attempt {attempt+1}")
+            logger.warning(f"  Timeout {origin}→{dst_iata} attempt {attempt + 1}")
         except Exception as e:
-            logger.error(f"  Error scraping flights {origin}→{destination}: {e}")
+            logger.error(f"  Error {origin}→{dst_iata}: {e}")
 
         if attempt < MAX_RETRIES:
-            await page.wait_for_timeout(random.randint(4000, 8000))
+            await page.wait_for_timeout(random.randint(4000, 7000))
 
     return results
 
 
-def _parse_flight_price(text: str) -> float | None:
-    import re
-    text = text.replace(",", "").replace(" ", "")
-    match = re.search(r"\$(\d{2,5}(?:\.\d{1,2})?)", text)
-    if match:
-        val = float(match.group(1))
-        # Real flights from ORD: domestic $150+, international $400+
-        # Filter out bogus low values (ads, unrelated prices)
-        if 150 < val < 50_000:
-            return val
-    return None
-
-
-def _extract_airline(text: str) -> str:
-    known = [
-        "United", "Delta", "American", "Southwest", "JetBlue",
-        "Alaska", "Spirit", "Frontier", "Allegiant", "Hawaiian",
-        "Air Canada", "Lufthansa", "British Airways", "Emirates",
-    ]
-    for airline in known:
-        if airline.lower() in text.lower():
-            return airline
-    return "Unknown"
-
-
-def _parse_duration(text: str) -> int | None:
-    import re
-    # "5 hr 20 min" or "5h 20m"
-    match = re.search(r"(\d+)\s*hr?\s*(\d+)?\s*min?", text, re.IGNORECASE)
-    if match:
-        hours = int(match.group(1))
-        mins = int(match.group(2)) if match.group(2) else 0
-        return hours * 60 + mins
-    return None
-
-
-# ── Main ────────────────────────────────────────────────────────────────────────
-
 async def run_flight_scraper(trip_id_filter: str = None, dry_run: bool = False):
     run_id = str(uuid_lib.uuid4())[:8]
-    logger.info(f"=== Flight Scraper run [{run_id}] started at {datetime.now().strftime('%Y-%m-%d %H:%M')} ===")
+    logger.info(
+        f"=== Flight Scraper run [{run_id}] started at "
+        f"{datetime.now().strftime('%Y-%m-%d %H:%M')} ==="
+    )
 
     trips = [t for t in get_active_trips() if t.get("origin")]
     if trip_id_filter:
         trips = [t for t in trips if str(t["id"]) == trip_id_filter]
 
     if not trips:
-        logger.info("No trips with origin defined — skipping flight scraper")
+        logger.info("No trips with origin defined — skipping")
         return
 
     async with async_playwright() as pw:
@@ -332,7 +295,11 @@ async def run_flight_scraper(trip_id_filter: str = None, dry_run: bool = False):
         )
 
         for trip in trips:
-            logger.info(f"\n── Trip: {trip['name']} [{trip['origin']} → {trip['destination']}] ──")
+            dst_iata = get_iata(trip["destination"])
+            logger.info(
+                f"\n── Trip: {trip['name']} "
+                f"[{trip['origin']} → {dst_iata}] ──"
+            )
 
             context = await browser.new_context(
                 user_agent=random.choice(USER_AGENTS),
@@ -345,21 +312,24 @@ async def run_flight_scraper(trip_id_filter: str = None, dry_run: bool = False):
             )
             page = await context.new_page()
 
-            # Generate depart dates from trip window
-            check_in_start = trip["check_in_start"]
-            check_in_end   = trip["check_in_end"]
+            current = trip["check_in_start"]
+            end     = trip["check_in_end"]
 
-            current = check_in_start
-            while current <= check_in_end:
+            while current <= end:
                 for dur in trip["durations"]:
                     return_date = current + timedelta(days=dur)
-                    results = await scrape_google_flights(page, trip, current, return_date)
+                    results = await scrape_google_flights(
+                        page, trip, current, return_date
+                    )
 
                     for r in results:
                         if dry_run:
-                            print(f"  [DRY RUN] {trip['origin']}→{trip['destination']} | "
-                                  f"{current} / Return {return_date} | "
-                                  f"{r['airline']} | ${r['price']:.0f} | {r['stops']} stop(s)")
+                            print(
+                                f"  [DRY RUN] {trip['origin']}→{dst_iata} | "
+                                f"{current} / ret {return_date} | "
+                                f"{r['airline']} | ${r['price']:.0f} | "
+                                f"{r['stops']} stop(s)"
+                            )
                             continue
 
                         snap_id = save_flight_snapshot(
@@ -372,10 +342,9 @@ async def run_flight_scraper(trip_id_filter: str = None, dry_run: bool = False):
                             airline=r.get("airline"),
                             stops=r.get("stops", 0),
                             duration_mins=r.get("duration_mins"),
-                            provider=r.get("provider", "Google Flights"),
+                            provider="Google Flights",
                             run_id=run_id,
                         )
-
                         is_new_low = upsert_flight_low(
                             trip_id=str(trip["id"]),
                             origin=trip["origin"],
@@ -385,13 +354,15 @@ async def run_flight_scraper(trip_id_filter: str = None, dry_run: bool = False):
                             new_price=r["price"],
                             snapshot_id=snap_id,
                         )
-
                         if is_new_low:
-                            logger.info(f"  🔻 NEW FLIGHT LOW: {trip['origin']}→{trip['destination']} "
-                                        f"{current}/ret {return_date} | "
-                                        f"{r['airline']} | ${r['price']:.0f}")
+                            logger.info(
+                                f"  🔻 NEW LOW: {trip['origin']}→{dst_iata} "
+                                f"{current}/ret {return_date} | "
+                                f"{r['airline']} | ${r['price']:.0f}"
+                            )
 
-                    await page.wait_for_timeout(int(random.uniform(*REQUEST_DELAY) * 1000))
+                    # Polite delay
+                    await page.wait_for_timeout(random.randint(4000, 8000))
 
                 current += timedelta(days=1)
 
@@ -399,11 +370,11 @@ async def run_flight_scraper(trip_id_filter: str = None, dry_run: bool = False):
 
         await browser.close()
 
-    logger.info(f"\n=== Flight Scraper run [{run_id}] complete ===")
+    logger.info(f"\n=== Flight Scraper [{run_id}] complete ===")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Flight price scraper")
+    parser = argparse.ArgumentParser()
     parser.add_argument("--trip-id", help="Scrape only a specific trip UUID")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
