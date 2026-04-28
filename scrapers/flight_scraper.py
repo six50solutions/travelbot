@@ -84,21 +84,42 @@ def build_google_flights_url(origin: str, destination: str,
     return direct
 
 
+# IATA code map for city destinations
+DESTINATION_IATA = {
+    "Maui, HI": "OGG",
+    "Honolulu, HI": "HNL",
+    "Miami Beach, FL": "MIA",
+    "Miami, FL": "MIA",
+    "Cancun, Mexico": "CUN",
+    "Paris, France": "CDG",
+    "London, UK": "LHR",
+    "Barcelona, Spain": "BCN",
+    "Rome, Italy": "FCO",
+    "Amsterdam, Netherlands": "AMS",
+    "Tokyo, Japan": "NRT",
+    "Bangkok, Thailand": "BKK",
+    "Singapore": "SIN",
+    "Bali, Indonesia": "DPS",
+    "Dubai, UAE": "DXB",
+}
+
+def get_iata(destination: str) -> str:
+    """Get IATA code for a destination, fallback to first 3 chars."""
+    return DESTINATION_IATA.get(destination, destination[:3].upper())
+
+
 def build_flights_search_url(origin: str, destination: str,
                               depart_date: date, return_date: date = None) -> str:
-    """Alternative simpler Google Flights URL via travel search."""
-    dep = depart_date.strftime("%Y-%m-%d")
-    url = (
-        f"https://www.google.com/travel/flights/search"
-        f"?tfs=CBwQAhoeagcIARIDORD&hl=en&curr=USD"
-    )
-    # Most reliable: construct the full query URL
+    """Build Google Flights URL using IATA codes."""
+    dep_iata = origin.upper()
+    dst_iata = get_iata(destination)
     dep_str = depart_date.strftime("%Y-%m-%d")
-    q = f"flights from {origin} to {destination} on {dep_str}"
     if return_date:
         ret_str = return_date.strftime("%Y-%m-%d")
-        q += f" returning {ret_str}"
-    return f"https://www.google.com/search?q={quote_plus(q)}&hl=en"
+        q = f"flights from {dep_iata} to {dst_iata} {dep_str} return {ret_str}"
+    else:
+        q = f"flights from {dep_iata} to {dst_iata} {dep_str}"
+    return f"https://www.google.com/search?q={quote_plus(q)}&hl=en&gl=us&curr=USD"
 
 
 # ── Scraper ─────────────────────────────────────────────────────────────────────
@@ -252,11 +273,12 @@ async def scrape_google_flights(page, trip: dict, depart_date: date,
 def _parse_flight_price(text: str) -> float | None:
     import re
     text = text.replace(",", "").replace(" ", "")
-    # Flight prices are typically $X,XXX — look for $nnn+ patterns
     match = re.search(r"\$(\d{2,5}(?:\.\d{1,2})?)", text)
     if match:
         val = float(match.group(1))
-        if 30 < val < 50_000:
+        # Real flights from ORD: domestic $150+, international $400+
+        # Filter out bogus low values (ads, unrelated prices)
+        if 150 < val < 50_000:
             return val
     return None
 
