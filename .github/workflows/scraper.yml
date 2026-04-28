@@ -48,7 +48,7 @@ jobs:
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
           NOTIFY_FROM_EMAIL:   ${{ secrets.NOTIFY_FROM_EMAIL }}
           NOTIFY_TO_EMAIL:     ${{ secrets.NOTIFY_TO_EMAIL }}
-          TRIP_FILTER:         "Hawaii — Maui,Hawaii — Oahu,Miami,Cancun"
+          TRIP_FILTER:         "Hawaii — Maui,Hawaii — Oahu,Miami,Cancun,Hawaii — Maui Summer,Hawaii — Oahu Summer,Miami Long Weekend,Cancun All-Inclusive"
         run: |
           DRY="${{ github.event.inputs.dry_run }}"
           python scrapers/hotel_scraper.py ${DRY:+--dry-run}
@@ -87,7 +87,7 @@ jobs:
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
           NOTIFY_FROM_EMAIL:   ${{ secrets.NOTIFY_FROM_EMAIL }}
           NOTIFY_TO_EMAIL:     ${{ secrets.NOTIFY_TO_EMAIL }}
-          TRIP_FILTER:         "Europe — Paris,Europe — London,Europe — Barcelona + Rome,Asia — Tokyo,Asia — Singapore + Bangkok,Bali,Dubai"
+          TRIP_FILTER:         "Europe — Paris,Europe — London,Europe — Barcelona + Rome,Asia — Tokyo,Asia — Singapore + Bangkok,Bali,Dubai,Bali Retreat"
         run: |
           DRY="${{ github.event.inputs.dry_run }}"
           python scrapers/hotel_scraper.py ${DRY:+--dry-run}
