@@ -187,6 +187,11 @@ async def scrape_google_hotels(page, hotel: dict, check_in: date,
                         if not price:
                             continue
 
+                        # Price floor: min $75/night — filters out fees, ratings, etc.
+                        nights = max((check_out - check_in).days, 1)
+                        if price < 75 * nights:
+                            continue
+
                         # Extract provider: first non-price, non-button line
                         provider = _extract_provider_from_text(row_text)
 
@@ -233,7 +238,8 @@ async def scrape_google_hotels(page, hotel: dict, check_in: date,
                     seen = set()
                     for text in price_data:
                         price = _parse_price(text)
-                        if price and price not in seen and 50 < price < 25_000:
+                        nights = max((check_out - check_in).days, 1)
+                        if price and price not in seen and price >= 75 * nights and price < 100_000:
                             seen.add(price)
                             provider = _extract_provider_from_text(text)
                             results.append({
