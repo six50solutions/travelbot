@@ -87,7 +87,7 @@ jobs:
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
           NOTIFY_FROM_EMAIL:   ${{ secrets.NOTIFY_FROM_EMAIL }}
           NOTIFY_TO_EMAIL:     ${{ secrets.NOTIFY_TO_EMAIL }}
-          TRIP_FILTER:         "Europe — Paris,Europe — London,Europe — Barcelona + Rome,Asia — Tokyo,Asia — Singapore + Bangkok,Bali,Dubai,Bali Retreat"
+          TRIP_FILTER: "Europe — Paris,Europe — London,Europe — Barcelona + Rome,Asia — Tokyo,Asia — Singapore + Bangkok,Bali,Dubai"
         run: |
           DRY="${{ github.event.inputs.dry_run }}"
           python scrapers/hotel_scraper.py ${DRY:+--dry-run}
